@@ -41,9 +41,11 @@ func GetConfig() *Config {
 	
 }
 
+
+
 // ConnectDB establishes a connection to the database and returns a GORM DB instance
 func ConnectDB(config *Config) (*gorm.DB, error) {
-	fmt.Println(os.Getenv("DB_USER"))
+	fmt.Println(os.Getenv("GOOGLE_CLIENT_ID"))
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
 		config.DBHost, config.DBUser, config.DBPassword, config.DBName, config.DBPort)
 	

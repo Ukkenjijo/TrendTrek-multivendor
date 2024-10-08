@@ -21,6 +21,10 @@ func Signup(c *fiber.Ctx) error {
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
+	// Validate the request input
+	if err := utils.ValidateStruct(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
 
 	// Check if user already exists
 	var existingUser models.User
@@ -139,4 +143,118 @@ func VerifyOTP(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "User verified successfully"})
+}
+
+func Login(c *fiber.Ctx) error {
+	// Parse the request body into the LoginRequest struct
+	req := new(models.EmailLoginRequest)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
+	}
+
+	// Validate the request input
+	if err := utils.ValidateStruct(*req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Fetch the user by email
+	var user models.User
+	if err := database.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid email or password"})
+	}
+
+	// Compare the hashed password with the provided password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(req.Password)); err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid email or password"})
+	}
+	if user.Blocked {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "user is not authorized to access",
+		})
+
+	}
+
+	// Generate JWT token
+	token, err := utils.GenerateJWT(user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate token"})
+	}
+
+	// Return the token and user info
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Login successful",
+		"token":   token,
+	})
+}
+
+func ForgetPassword(c *fiber.Ctx) error {
+
+	email := new(models.ForgetPasswordRequest)
+
+	if err := c.BodyParser(email); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
+	}
+	//validate the requested struct
+	if err := utils.ValidateStruct(email); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Fetch the user by email
+	var user models.User
+	if err := database.DB.Where("email = ?", email.Email).First(&user).Error; err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User with this  email not found!"})
+	}
+
+	otp, err := utils.GenerateOTP()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate OTP"})
+	}
+
+	// Store OTP with expiration of 5 minutes
+	utils.StoreOTP(email.Email, otp, 5*time.Minute)
+	log.Println(otp)
+	// send the otp to the email
+	if err := utils.SendOTPEmail(email.Email, otp); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to send OTP"})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"messsage": "Password reset email send"})
+
+}
+
+func ResetPassword(c *fiber.Ctx) error {
+	
+	req := new(models.ResetPasswordRequest)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
+	}
+
+	// Verify OTP
+	if !utils.VerifyOTP(req.Email, req.OTP) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired OTP"})
+	}
+
+
+	
+	// Fetch the user by email
+	var user models.User
+	if err := database.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	// Hash the new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to hash password"})
+	}
+
+	// Update the user's password
+	user.HashedPassword = string(hashedPassword)
+
+	// Update the user in the database
+	if err := database.DB.Save(&user).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update user password"})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Password reset successfully"})
 }
