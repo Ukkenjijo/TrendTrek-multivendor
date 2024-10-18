@@ -32,6 +32,16 @@ type UserProfileResponse struct {
 	PhoneNumber    string `json:"phone"`
 	ProfilePicture string `json:"profile_picture"`
 }
+type StoreProfileResponse struct {
+	ID          uint   `json:"id"`
+	Name   string `json:"store_name"`
+	Description string `json:"description"`
+	Address     string `json:"address"`
+	City        string `json:"city"`
+	State       string `json:"state"`
+	Country     string `json:"country"`
+	StoreImage  string `json:"store_image"`
+}
 
 type ForgetPasswordRequest struct {
 	Email string `json:"email" validate:"required,email"`

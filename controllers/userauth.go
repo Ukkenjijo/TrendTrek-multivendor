@@ -211,7 +211,7 @@ func ForgetPassword(c *fiber.Ctx) error {
 	}
 
 	// Store OTP with expiration of 5 minutes
-	utils.StoreOTP(email.Email, otp, 5*time.Minute)
+	utils.StoreOTP(email	.Email, otp, 5*time.Minute)
 	log.Println(otp)
 	// send the otp to the email
 	if err := utils.SendOTPEmail(email.Email, otp); err != nil {

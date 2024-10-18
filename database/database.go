@@ -21,7 +21,7 @@ func ConnectToDB(){
 	}
 
 	// Run database migrations (example)
-	err = DB.AutoMigrate(&models.User{},&models.Store{},&models.Category{},&models.Product{},&models.Image{})
+	err = DB.AutoMigrate(&models.User{},&models.Store{},&models.Category{},&models.Product{},&models.Image{},&models.Address{},&models.Cart{},&models.CartItem{},&models.Order{},&models.OrderItem{})
 	if err != nil {
 		fmt.Printf("Error during migration: %v\n", err)
 	}

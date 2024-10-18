@@ -33,3 +33,12 @@ type ResetPasswordRequest struct {
 	OTP      string `json:"otp"`
 	Password string `json:"password" validate:"required,password"`
 }
+
+type OrderRequest struct {
+	AddressID uint `json:"address_id" validate:"required"`
+	PaymentMode string `json:"payment_mode" validate:"required"`
+}
+
+type StatusRequest struct {
+	Status string `json:"status" validate:"required"`
+}

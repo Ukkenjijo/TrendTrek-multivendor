@@ -26,7 +26,7 @@ var jwtSecretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 // generateJWT generates a JWT token for the authenticated user
 func GenerateJWT(user models.User) (string, error) {
 	// Set expiration time for the token (e.g., 24 hours)
-	expirationTime := time.Now().Add(24 * time.Hour)
+	expirationTime := time.Now().Add(5 *24 * time.Hour)
 
 	// Create the JWT claims, including the user ID and email
 	claims := &Claims{

@@ -40,8 +40,10 @@ func SetUpRoutes(app *fiber.App) {
 	user.Get("/categories",controllers.GetAllCategories)
 	user.Get("/category/:id",controllers.GetCategoryByID)
 	user.Get("/products",controllers.GetAllProducts)
+	user.Get("/stores",controllers.GetAllStores)
 	user.Get("/products/category/:id",controllers.GetProductsByCategory)
 	user.Get("/product/:id",controllers.GetProductbyId)
+	user.Get("/search",controllers.SearchProducts)
 	user.Get("google/login",controllers.GoogleLogin)
 	user.Get("google/callback",controllers.GoogleCallback)
     
@@ -50,6 +52,21 @@ func SetUpRoutes(app *fiber.App) {
 	{
 		privateuser.Get("myaccount/profile",controllers.GetProfile)
 		privateuser.Patch("myaccount/profile/update",controllers.UpdateProfile)
+		privateuser.Get("myaccount/addresses",controllers.ListAddresses)
+		privateuser.Post("myaccount/addresses",controllers.AddAddress)
+		privateuser.Patch("myaccount/addresses/:id",controllers.EditAddress)
+		privateuser.Delete("myaccount/addresses/:id",controllers.DeleteAddress)
+		privateuser.Post("cart/add",controllers.AddToCart)
+		privateuser.Get("cart",controllers.ListCartItems)
+		privateuser.Put("cart/update/:id",controllers.UpdateCartQuantity)
+		privateuser.Delete("cart/remove/:id",controllers.RemoveFromCart)
+		privateuser.Post("checkout/orders",controllers.PlaceOrder)
+		privateuser.Get("orders",controllers.ListOrders)
+		privateuser.Get("orders/:id",controllers.GetOrderDetails)
+		privateuser.Put("orders/cancel/:id",controllers.CancelOrder)
+		privateuser.Put("orders/cancel/:order_id/:item_id",controllers.CancelOrderItem)
+
+
 		
 
 	}
@@ -68,6 +85,13 @@ func SetUpRoutes(app *fiber.App) {
 		privatestore.Post("/products/edit/:id",controllers.EditProduct)
 		privatestore.Delete("/products/delete/:id",controllers.DeleteProduct)
 		privatestore.Get("/products",controllers.GetProducts)	
+		privatestore.Get("myaccount/seller/profile",controllers.GetProfile)
+		privatestore.Patch("myaccount/seller/profile/update",controllers.UpdateProfile)
+		privatestore.Get("myaccount/store/profile",controllers.GetStoreProfile)
+		privatestore.Patch("myaccount/store/profile/update",controllers.UpdateStoreProfile)
+		privatestore.Get("orders",controllers.ListSellerOrders)
+		privatestore.Put("orders/:order_id/:item_id/status",controllers.UpdateOrderItemStatus)
+		
 
 	}
 	
