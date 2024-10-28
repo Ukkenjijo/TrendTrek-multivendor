@@ -257,6 +257,12 @@ func EditCategory(c *fiber.Ctx) error {
             "error": "Failed to parse request",
         })
     }
+    //check if the category is not repeated
+    if err:= database.DB.Where("name = ? AND id != ?", category.Name, category.ID).First(&models.Category{}).Error; err == nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "error": "Category already exists",
+        })
+    }
 
     // Save the changes to the category
     if err := database.DB.Save(&category).Error; err != nil {

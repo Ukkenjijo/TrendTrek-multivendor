@@ -23,6 +23,11 @@ func SetUpRoutes(app *fiber.App) {
 		privateadmin.Post("/categories/add",controllers.AddCategory)
 		privateadmin.Patch("/categories/edit/:id",controllers.EditCategory)
 		privateadmin.Delete("/categories/delete/:id",controllers.DeleteCategory)
+
+		privateadmin.Post("/coupons/add",controllers.CreateCoupon)
+		privateadmin.Get("/coupons",controllers.GetAllCoupons)
+		
+
 		
 	}
 	
@@ -56,15 +61,26 @@ func SetUpRoutes(app *fiber.App) {
 		privateuser.Post("myaccount/addresses",controllers.AddAddress)
 		privateuser.Patch("myaccount/addresses/:id",controllers.EditAddress)
 		privateuser.Delete("myaccount/addresses/:id",controllers.DeleteAddress)
+		privateuser.Get("myaccount/getrefferallink",controllers.GenerateReferralLink)
+		privateuser.Get("myaccount/wallet",controllers.GetWalletBallance)
+		privateuser.Get("myaccount/wallet/history",controllers.GetWalletHistory)
 		privateuser.Post("cart/add",controllers.AddToCart)
 		privateuser.Get("cart",controllers.ListCartItems)
 		privateuser.Put("cart/update/:id",controllers.UpdateCartQuantity)
 		privateuser.Delete("cart/remove/:id",controllers.RemoveFromCart)
+		privateuser.Post("/wishlist/add/:product_id",controllers.AddToWishlist)
+		privateuser.Delete("wishlist/remove/:product_id",controllers.RemoveFromWishlist)
+		privateuser.Get("wishlist",controllers.GetWishlist)
 		privateuser.Post("checkout/orders",controllers.PlaceOrder)
 		privateuser.Get("orders",controllers.ListOrders)
 		privateuser.Get("orders/:id",controllers.GetOrderDetails)
 		privateuser.Put("orders/cancel/:id",controllers.CancelOrder)
+		privateuser.Patch("orders/return/:id", controllers.ReturnOrderItem)
+		privateuser.Post("coupons/apply",controllers.ApplyCoupon)
+		privateuser.Put("coupons/remove",controllers.RemoveCoupon)
 		privateuser.Put("orders/cancel/:order_id/:item_id",controllers.CancelOrderItem)
+		privateuser.Post("payments/razorpay/verify", controllers.VerfyRazorpayPayment)
+		
 
 
 		
@@ -84,7 +100,11 @@ func SetUpRoutes(app *fiber.App) {
 		privatestore.Post("/products/add",controllers.AddProduct)
 		privatestore.Post("/products/edit/:id",controllers.EditProduct)
 		privatestore.Delete("/products/delete/:id",controllers.DeleteProduct)
-		privatestore.Get("/products",controllers.GetProducts)	
+		privatestore.Put("/products/updatestock/:id",controllers.UpdateProductStock)
+		privatestore.Get("/products",controllers.GetProducts)
+		privatestore.Post("/products/:product_id/offer",controllers.CreateOrUpdateOffer)	
+		privatestore.Delete("/products/:product_id/offer",controllers.DeleteOffer)
+		privatestore.Get("/products/offers",controllers.ListOffers)
 		privatestore.Get("myaccount/seller/profile",controllers.GetProfile)
 		privatestore.Patch("myaccount/seller/profile/update",controllers.UpdateProfile)
 		privatestore.Get("myaccount/store/profile",controllers.GetStoreProfile)

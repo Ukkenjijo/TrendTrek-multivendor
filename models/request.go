@@ -35,10 +35,30 @@ type ResetPasswordRequest struct {
 }
 
 type OrderRequest struct {
-	AddressID uint `json:"address_id" validate:"required"`
+	AddressID   string `json:"address_id" validate:"required"`
 	PaymentMode string `json:"payment_mode" validate:"required"`
 }
 
 type StatusRequest struct {
 	Status string `json:"status" validate:"required"`
+}
+
+type RAZORPAY_Payment struct {
+	RazorpayPaymentID string `json:"razorpay_payment_id"`
+	RazorpayOrderID   string `json:"razorpay_order_id"`
+	RazorpaySignature string `json:"razorpay_signature"`
+}
+
+type UpdateProductStockRequest struct {
+	StockQuantity int `json:"stock_quantity" validate:"required"`
+}
+
+type CouponRequest struct {
+	Name              string  `json:"name" validate:"required"`
+	Code              string  `json:"code" validate:"required"`
+	Discount          float64 `json:"discount" validate:"required"`
+	ExpiresAt         string  `json:"expires_at" validate:"required"`
+	MaxUsage          int     `json:"max_usage" validate:"required"`
+	MinPurchaseAmount float64  `json:"min_purchase_amount" validate:"required"`
+	MaxDiscountAmount float64  `json:"max_discount_amount" validate:"required"`
 }

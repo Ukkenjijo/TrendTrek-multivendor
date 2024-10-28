@@ -110,7 +110,8 @@ func EditProduct(c *fiber.Ctx) error {
 	product.Description = form.Value["description"][0]
 	product.Price, _ = strconv.ParseFloat(form.Value["price"][0], 64)
 	product.StockQuantity, _ = strconv.Atoi(form.Value["stock_quantity"][0])
-	product.StockLeft,_=strconv.Atoi(form.Value["stock_quantity"][0])
+	StockLeft, _ := strconv.Atoi(form.Value["stock_quantity"][0])
+	product.StockLeft += StockLeft
 	categoryID, _ := strconv.Atoi(form.Value["category_id"][0])
 	product.CategoryID = uint(categoryID)
 
@@ -185,7 +186,7 @@ func GetAllProducts(c *fiber.Ctx) error {
 	var productResponses []models.ProductResponse
 
 	// Query to fetch all products with related Category, Store, and Images
-	if err := database.DB.Preload("Category").Preload("Store").Preload("Images").Find(&products).Error; err != nil {
+	if err := database.DB.Preload("Category").Preload("Store").Preload("Images").Preload("Offer").Find(&products).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch products",
 		})
@@ -198,7 +199,7 @@ func GetAllProducts(c *fiber.Ctx) error {
 			Name:          product.Name,
 			Description:   product.Description,
 			Price:         product.Price,
-			StockQuantity: product.StockLeft,
+			StockQuantity: product.StockQuantity,
 			IsActive:      product.IsActive,
 			Category: models.CategoryResponse{
 				ID:   product.Category.ID,
@@ -214,6 +215,14 @@ func GetAllProducts(c *fiber.Ctx) error {
 		// Map image URLs
 		for i, image := range product.Images {
 			productResponse.Images[i] = image.URL
+		}
+		//Calculate discount price for each product
+		if product.Offer != nil && product.Offer.DiscountPercentage > 0 {
+			discountPercentage := product.Offer.DiscountPercentage
+			discountedPrice := product.Price * (1 - discountPercentage/100)
+
+			productResponse.DiscountPercentage = &discountPercentage
+			productResponse.DiscountedPrice = &discountedPrice
 		}
 
 		// Add the product response to the list
@@ -244,7 +253,7 @@ func GetProductbyId(c *fiber.Ctx) error {
 		Name:          product.Name,
 		Description:   product.Description,
 		Price:         product.Price,
-		StockQuantity: product.StockLeft,
+		StockQuantity: product.StockQuantity,
 		IsActive:      product.IsActive,
 		Category: models.CategoryResponse{
 			ID:   product.Category.ID,
@@ -390,5 +399,37 @@ func GetProductsByCategory(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message":  "Products retrieved successfully",
 		"products": productResponses,
+	})
+}
+
+// update the product stock
+func UpdateProductStock(c *fiber.Ctx) error {
+	// Get the product ID from the URL
+	id := c.Params("id")
+	var product models.Product
+	if err := database.DB.First(&product, id).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Product not found",
+		})
+	}
+	log.Println(product.StockQuantity)
+
+	// Get the new stock quantity from the request body
+	var request models.UpdateProductStockRequest
+	if err := c.BodyParser(&request); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+	stockQuantity := request.StockQuantity
+	// Update the product stock quantity
+	product.StockQuantity += stockQuantity
+	if err := database.DB.Save(&product).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update product stock",
+		})
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Product stock updated successfully",
 	})
 }

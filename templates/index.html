@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Razorpay Payment Test</title>
+    
+    <!-- Include Razorpay Checkout Script -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <!-- Alpine.js -->
+    <script src="//unpkg.com/alpinejs" defer></script>
+</head>
+<body>
+    <div x-data="paymentHandler()">
+        <h1>Razorpay Payment Integration</h1>
+
+        <!-- Order form -->
+        <form @submit.prevent="placeOrder">
+            <div>
+                <label for="address">Address ID:</label>
+                <input type="text" id="address" x-model="orderDetails.address_id" required>
+            </div>
+            <div>
+                <label for="payment_mode">Payment Mode:</label>
+                <select id="payment_mode" x-model="orderDetails.payment_mode">
+                    <option value="razorpay">Razorpay</option>
+                    <option value="COD">Cash on Delivery</option>
+                </select>
+            </div>
+            <button type="submit">Place Order</button>
+        </form>
+
+        <!-- Display for errors or success -->
+        <div x-show="errorMessage" style="color: red;">
+            <p x-text="errorMessage"></p>
+        </div>
+        <div x-show="successMessage" style="color: green;">
+            <p x-text="successMessage"></p>
+        </div>
+    </div>
+
+    <script>
+        function paymentHandler() {
+            return {
+                orderDetails: {
+                    address_id: '',    // Fill with the address ID
+                    payment_mode: 'razorpay' // Default to Razorpay for this test
+                },
+                errorMessage: '',
+                successMessage: '',
+
+                // Method to place order
+                async placeOrder() {
+                    this.errorMessage = '';
+                    this.successMessage = '';
+                    this.jwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo2LCJlbWFpbCI6InNhanVhbGVlbmExQGdtYWlsLmNvbSIsInJvbGUiOiJjdXN0b21lciIsImV4cCI6MTczMDI5NjI0Nn0.fcURgvEkFxQKGEdB6hshzr6Ga4-aJQdjbzcigItgvaQ";
+
+                    try {
+                        // Call your backend API to place the order
+                        let response = await fetch('http://localhost:3000/api/v1/user/checkout/orders', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${this.jwtToken}`
+                            },
+                            body: JSON.stringify(this.orderDetails)
+                        });
+                        console.log(this.orderDetails)
+
+                        let data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Failed to place order');
+                        }
+
+                        if (this.orderDetails.payment_mode === 'razorpay') {
+                            // Proceed with Razorpay payment
+                            this.startRazorpayPayment(data);
+                        } else {
+                            this.successMessage = "Order placed successfully with COD!";
+                        }
+
+                    } catch (error) {
+                        this.errorMessage = error.message || "An error occurred";
+                    }
+                },
+
+                // Method to start Razorpay payment
+                startRazorpayPayment(orderData) {
+                    var options = {
+                        "key": "rzp_test_4TyJkSMMUMO64l", // Replace with your Razorpay Key ID
+                        "amount": orderData.amount * 100, // Amount in paise
+                        "currency": orderData.currency,
+                        "name": "Test Store",
+                        "description": "Test Transaction",
+                        "order_id": orderData.razorpay_order_id, // The order ID returned by your backend
+                        "handler": (response) => {
+                            // On successful payment, confirm payment with backend
+                            this.confirmPayment(response);
+                        },
+                        "prefill": {
+                            "name": "John Doe",
+                            "email": "john.doe@example.com",
+                            "contact": "9999999999"
+                        },
+                        "theme": {
+                            "color": "#3399cc"
+                        }
+                    };
+
+                    // Initialize Razorpay payment modal
+                    var rzp1 = new Razorpay(options);
+                    rzp1.open();
+                },
+
+                // Method to confirm payment with backend
+                async confirmPayment(paymentResponse) {
+                    try {
+                        let response = await fetch('http://localhost:3000/api/v1/user/payments/razorpay/verify', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${this.jwtToken}`
+                            },
+                            body: JSON.stringify({
+                                razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                                razorpay_order_id: paymentResponse.razorpay_order_id,
+                                razorpay_signature: paymentResponse.razorpay_signature
+                            })
+                        });
+
+                        let data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Failed to verify payment');
+                        }
+
+                        this.successMessage = "Payment successful! Order placed.";
+                    } catch (error) {
+                        this.errorMessage = error.message || "Payment verification failed.";
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

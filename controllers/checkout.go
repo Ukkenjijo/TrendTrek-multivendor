@@ -3,80 +3,92 @@ package controllers
 import (
 	"fmt"
 	"log"
+	"os"
+	"strconv"
+	"time"
 
 	"github.com/Ukkenjijo/trendtrek/database"
 	"github.com/Ukkenjijo/trendtrek/models"
 	"github.com/Ukkenjijo/trendtrek/utils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/razorpay/razorpay-go"
+	"gorm.io/gorm"
 )
 
+// Initialize Razorpay Client
+var razorpayClient *razorpay.Client
+
+func InitRazorpay() {
+	razorpayClient = razorpay.NewClient(os.Getenv("RAZORPAY_KEY"), os.Getenv("RAZORPAY_SECRET"))
+}
+
+// PlaceOrder function with Razorpay payment integration
 func PlaceOrder(c *fiber.Ctx) error {
 	userId := c.Locals("user_id")
 
-	//parse the request body
+	// Parse the request body
 	req := new(models.OrderRequest)
+
 	if err := c.BodyParser(req); err != nil {
+		log.Println(err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
 	}
 	log.Println(req)
 
-	//Validate the request
+	// Validate the request
 	if err := utils.ValidateStruct(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	//Get the users cart
+	// Get the user's cart
 	var cart models.Cart
 	if err := database.DB.Preload("Items").Where("user_id = ?", userId).First(&cart).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Cart not found"})
 	}
+	addressID, _ := strconv.ParseUint(req.AddressID, 10, 32)
 
-	//get the address sanpshot
+	// Get the address snapshot
 	var address models.Address
-	if err := database.DB.Where("id = ? AND user_id = ?", req.AddressID, userId).First(&address).Error; err != nil {
+	if err := database.DB.Where("id = ? AND user_id = ?", addressID, userId).First(&address).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Address not found"})
 	}
 
-	//Ensure the cart is not empty
+	// Ensure the cart is not empty
 	if len(cart.Items) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cart is empty"})
 	}
-	log.Println(cart)
-	//Begin transaction
+
+	// Begin transaction
 	tx := database.DB.Begin()
 	defer tx.Rollback()
 
-	//Check stock availability for each item
-	var TotalAmount float64
-	for _, item := range cart.Items {
-		var product models.Product
-		if err := tx.First(&product, item.ProductID).Error; err != nil {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Product not found"})
-		}
-		log.Println("Stock Quantity:", product.StockQuantity)
-		if product.StockQuantity < item.Quantity {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Not enough stock for product %s", product.Name)})
-		}
-		//calculate the total amount for the order
-		TotalAmount += item.TotalPrice
-		//Deduct the quantity from the stock
-		product.StockQuantity -= item.Quantity
+	// Check stock availability and calculate total amount
+	var totalAmount float64=cart.CartTotal-cart.CouponDiscount
+	// for _, item := range cart.Items {
+	// 	var product models.Product
+	// 	if err := tx.First(&product, item.ProductID).Error; err != nil {
+	// 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Product not found"})
+	// 	}
 
-		if err := tx.Save(&product).Error; err != nil {
-			log.Println("New Stock Quantity:", product.StockQuantity)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update stock"})
-		}
+	// 	if product.StockQuantity < item.Quantity {
+	// 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": fmt.Sprintf("Not enough stock for product %s", product.Name)})
+	// 	}
+	// 	totalAmount += item.TotalPrice
+	// 	product.StockQuantity -= item.Quantity
 
-	}
-	log.Println(TotalAmount)
-
+	// 	if err := tx.Save(&product).Error; err != nil {
+	// 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update stock"})
+	// 	}
+	// }
 	
-	// Create an order with the user's details and order information
+	
+
+	// Create the order in the database
 	order := models.Order{
-		UserID:      uint(userId.(float64)),
-		TotalAmount: TotalAmount,
-		PaymentMode: req.PaymentMode,
-		Status:      "pending",
+		UserID:          uint(userId.(float64)),
+		TotalAmount:     totalAmount,
+		PaymentMode:     req.PaymentMode,
+		Status:          "pending",
 		ShippingStreet:  address.Street,
 		ShippingCity:    address.City,
 		ShippingState:   address.State,
@@ -87,32 +99,105 @@ func PlaceOrder(c *fiber.Ctx) error {
 	if err := tx.Create(&order).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create order"})
 	}
-	//create the order items
+     cartOrginal,TotalDiscount:=0.0,0.0
+	// Create the order items
 	for _, item := range cart.Items {
 		orderItem := models.OrderItem{
 			OrderID:    order.ID,
 			ProductID:  item.ProductID,
 			Quantity:   item.Quantity,
+			Price:      item.Price,
 			TotalPrice: item.TotalPrice,
 		}
+		cartOrginal += item.Price
+        TotalDiscount+= (item.Price- item.DiscountedPrice)
 		if err := tx.Create(&orderItem).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create order item"})
 		}
 	}
-	// Clear the user's cart when the order is placed
-	if err := tx.Where("id = ?", cart.ID).Delete(&models.Cart{}).Error; err != nil {
+	//Create the order details
+	var orderPaymentDetail models.OrderPaymentDetail
+	orderPaymentDetail.OrderID = order.ID
+	orderPaymentDetail.PaymentType = req.PaymentMode
+	orderPaymentDetail.OrderAmount = cartOrginal
+	orderPaymentDetail.OrderDiscount = TotalDiscount
+	orderPaymentDetail.CouponSavings = cart.CouponDiscount
+	orderPaymentDetail.FinalOrderAmount = totalAmount
+
+	// Clear the cart
+	if err := tx.Delete(&cart).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to clear cart"})
 	}
 
-	//Commit the transaction
+	// Create the payment
+	var payment models.Payment
+	payment.OrderID = order.ID
+	payment.PaymentType = req.PaymentMode
+	payment.Amount = totalAmount
+	payment.PaymentStatus = "pending"
+	
+
+	
+
+	InitRazorpay()
+
+	// If PaymentMode is Razorpay, create a Razorpay order
+	if req.PaymentMode == "razorpay" {
+		// Razorpay expects the amount in paise (so multiply by 100)
+		amount := int(totalAmount * 100)
+
+		// Prepare Razorpay order options
+		options := map[string]interface{}{
+			"amount":          amount,
+			"currency":        "INR",
+			"receipt":         fmt.Sprintf("order_%d", order.ID),
+			"payment_capture": 1,
+		}
+
+		// Create Razorpay order
+		razorpayOrder, err := razorpayClient.Order.Create(options, nil)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create Razorpay order"})
+		}
+		//set the payment status for razorpay
+		payment.RazorpayPaymentID = razorpayOrder["id"].(string)
+
+		if err := tx.Create(&payment).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create payment"})
+		}
+		
+		if err := tx.Create(&orderPaymentDetail).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create payment"})
+		}
+
+		// Commit the transaction and return the Razorpay order ID
+		if err := tx.Commit().Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to commit transaction"})
+		}
+
+		// Return Razorpay order details
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message":           "Order placed successfully",
+			"order_id":          order.ID,
+			"razorpay_order_id": razorpayOrder["id"],
+			"amount":            totalAmount,
+			"currency":          "INR",
+		})
+	}
+	if err := tx.Create(&payment).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create payment"})
+	}
+	
+
+	// Commit the transaction for non-Razorpay payments
 	if err := tx.Commit().Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to commit transaction"})
 	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message":  "Order placed successfully",
 		"order_id": order.ID,
 	})
-
 }
 
 func ListOrders(c *fiber.Ctx) error {
@@ -121,9 +206,34 @@ func ListOrders(c *fiber.Ctx) error {
 	if err := database.DB.Preload("Items").Where("user_id = ?", userId).Find(&orders).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve orders"})
 	}
+
+	var orderResponses []fiber.Map
+	for _, order := range orders {
+		orderResponse := fiber.Map{
+			"order_id":       order.ID,
+			"total_amount":   order.TotalAmount,
+			"status":         order.Status,
+			"shipping_city":  order.ShippingCity,
+			"shipping_state": order.ShippingState,
+			"payment_mode":   order.PaymentMode,
+			"items":          make([]fiber.Map, len(order.Items)),
+		}
+		for i, item := range order.Items {
+			orderResponse["items"].([]fiber.Map)[i] = fiber.Map{
+				"product_id":  item.ProductID,
+				"quantity":    item.Quantity,
+				"total_price": item.TotalPrice,
+			}
+		}
+		orderResponses = append(orderResponses, orderResponse)
+	}
+	if len(orderResponses)==0{
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "No orders found"})
+	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Orders retrieved successfully",
-		"orders":  orders,
+		"orders":  orderResponses,
 	})
 }
 
@@ -246,5 +356,60 @@ func GetOrderDetails(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Order details retrieved successfully",
 		"order":   order,
+	})
+}
+
+type ReturnRequest struct {
+	Reason string `json:"reason" validate:"required"` // Reason for returning the item
+}
+
+func ReturnOrderItem(c *fiber.Ctx) error {
+	// Step 1: Get the order item ID from the URL path
+	orderItemID, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid order item ID"})
+	}
+
+	// Step 2: Parse the request body to get the return reason
+	req := new(ReturnRequest)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	// Step 3: Find the order item by ID in the database
+	var orderItem models.OrderItem
+	if err := database.DB.First(&orderItem, uint(orderItemID)).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Order item not found"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query order item"})
+	}
+
+	// Step 4: Check if the order item is eligible for return (e.g., within return window)
+	var order models.Order
+	if err := database.DB.First(&order, orderItem.OrderID).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to query order"})
+	}
+
+	// Assume the return window is 30 days from order creation
+	returnWindow := order.CreatedAt.AddDate(0, 0, 30)
+	if time.Now().After(returnWindow) {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "Return window has expired"})
+	}
+
+	// Step 5: Update the order item's status to "returned" and set the return reason
+	orderItem.Status = "returned"
+	orderItem.ReturnReason = req.Reason
+	orderItem.ReturnedAt = time.Now()
+
+	if err := database.DB.Save(&orderItem).Error; err != nil {
+		log.Printf("Error updating order item: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order item"})
+	}
+
+	// Step 6: Respond with success message and updated order item details
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":    "Item returned successfully",
+		"order_item": orderItem,
 	})
 }

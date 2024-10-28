@@ -17,6 +17,9 @@ type OTPVerificationRequest struct {
 }
 
 func Signup(c *fiber.Ctx) error {
+	referralCode := c.Query("referral_code")
+	referral_name := c.Query("referral_name")
+
 	req := new(models.EmailSignupRequest)
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
@@ -37,16 +40,40 @@ func Signup(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to hash password"})
 	}
+	newReferralCode := utils.GenerateReferralCode()
 
 	newUser := models.User{
 		Name:           req.Name,
 		Email:          req.Email,
 		PhoneNumber:    string(req.PhoneNumber),
 		HashedPassword: string(hashedPassword),
+		ReferralCode:   newReferralCode,
 	}
 	if err := database.DB.Create(&newUser).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create user"})
 	}
+
+	// After user is created, create a wallet for the user
+	wallet := models.Wallet{
+		UserID:  newUser.ID,
+		Balance: 0.0, // Initial balance
+	}
+	if err := database.DB.Create(&wallet).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create wallet"})
+	}
+
+	//Claim referral code
+	if referralCode != "" {
+		err:=ClaimReferral(referral_name,referralCode,newUser.ID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Invalid or expired referral code"})
+		}
+	}
+	//save the newuser
+	if err := database.DB.Save(&newUser).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create user"})
+	}
+
 
 	// Generate OTP and send to user's email
 	otp, err := utils.GenerateOTP()
@@ -179,6 +206,18 @@ func Login(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate token"})
 	}
+	//generate refferal code and store it in the database
+	
+	// wallet := models.Wallet{
+	// 	UserID:  user.ID,
+	// 	Balance: 0.0, // Initial balance
+	// }
+	// if err := database.DB.Create(&wallet).Error; err != nil {
+	// 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create wallet"})
+	// }
+	if err := database.DB.Save(&user).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save user"})
+	}
 
 	// Return the token and user info
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -211,7 +250,7 @@ func ForgetPassword(c *fiber.Ctx) error {
 	}
 
 	// Store OTP with expiration of 5 minutes
-	utils.StoreOTP(email	.Email, otp, 5*time.Minute)
+	utils.StoreOTP(email.Email, otp, 5*time.Minute)
 	log.Println(otp)
 	// send the otp to the email
 	if err := utils.SendOTPEmail(email.Email, otp); err != nil {
@@ -223,7 +262,7 @@ func ForgetPassword(c *fiber.Ctx) error {
 }
 
 func ResetPassword(c *fiber.Ctx) error {
-	
+
 	req := new(models.ResetPasswordRequest)
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid input"})
@@ -234,8 +273,6 @@ func ResetPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid or expired OTP"})
 	}
 
-
-	
 	// Fetch the user by email
 	var user models.User
 	if err := database.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {

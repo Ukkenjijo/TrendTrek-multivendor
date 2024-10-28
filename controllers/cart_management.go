@@ -39,11 +39,22 @@ func AddToCart(c *fiber.Ctx) error {
         }
     }
 
-    // Find the product in the database
+    // Find the product in the database with the offers
     var product models.Product
-    if err := database.DB.First(&product, cartItemRequest.ProductID).Error; err != nil {
+    if err := database.DB.Preload("Offer").First(&product, cartItemRequest.ProductID).Error; err != nil {
         return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Product not found"})
     }
+    //Calculate the offer based on the product offer
+    originalPrice := product.Price
+	discountedPrice := originalPrice
+	var discountPercentage *float64
+
+
+	if product.Offer != nil && product.Offer.DiscountPercentage > 0 {
+        
+		discountPercentage = &product.Offer.DiscountPercentage
+		discountedPrice = originalPrice * (1 - *discountPercentage/100)
+	}
 
     // Check stock availability
     if cartItemRequest.Quantity > product.StockQuantity {
@@ -61,7 +72,7 @@ func AddToCart(c *fiber.Ctx) error {
     }
 
     // Calculate total price
-    totalPrice := float64(cartItemRequest.Quantity) * product.Price
+    totalPrice := float64(cartItemRequest.Quantity) * discountedPrice
 
     // Check if the product is already in the user's cart
     var existingCartItem models.CartItem
@@ -78,7 +89,7 @@ func AddToCart(c *fiber.Ctx) error {
         }
 
         // Update the total price for the item
-        existingCartItem.TotalPrice = float64(existingCartItem.Quantity) * product.Price
+        existingCartItem.TotalPrice = float64(existingCartItem.Quantity) * discountedPrice
 
         // Save the updated cart item
         if err := database.DB.Save(&existingCartItem).Error; err != nil {
@@ -93,11 +104,32 @@ func AddToCart(c *fiber.Ctx) error {
         ProductID: cartItemRequest.ProductID,
         Quantity:  cartItemRequest.Quantity,
         Price:     product.Price,
+        DiscountedPrice: discountedPrice,
+        DiscountPercentage: discountPercentage,
         TotalPrice: totalPrice,
     }
     if err := database.DB.Create(&newCartItem).Error; err != nil {
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to add to cart"})
     }
+
+    var newcart models.Cart
+    if err := database.DB.Preload("Items").Where("user_id = ?", userId).First(&newcart).Error; err != nil {
+        return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Cart not found"})
+    }
+    
+    // Calculate the total cart value
+    var cartTotal float64 = 0
+    for _, item := range newcart.Items {
+        cartTotal += item.TotalPrice
+        log.Println("total1",cartTotal)
+    }
+    newcart.CartTotal = cartTotal-cart.CouponDiscount
+    log.Println("total",newcart.CartTotal,cartTotal)
+
+    if err := database.DB.Save(&newcart).Error; err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create total of cart"})
+    }
+
 
     return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Product added to cart"})
 }
@@ -111,15 +143,20 @@ func ListCartItems(c *fiber.Ctx) error {
     }
 
     // Calculate the total cart value
-    var cartTotal float64 = 0
+    var TotalDiscount,cartOrginal float64 = 0.0,0.0
     for _, item := range cart.Items {
-        cartTotal += item.TotalPrice
+        cartOrginal += item.Price*float64(item.Quantity)
+        TotalDiscount+= (item.Price- item.DiscountedPrice)
     }
+    order_total:=cart.CartTotal-cart.CouponDiscount
 
     return c.Status(fiber.StatusOK).JSON(fiber.Map{
         "message": "Cart retrieved successfully",
         "data":    cart.Items,    // Send just the items to the client
-        "cart_total": cartTotal,  // Send the total value of the cart
+        "cart_total": cartOrginal,  // Send the total value of the cart
+        "coupon_discount": cart.CouponDiscount,
+        "product_discount": TotalDiscount,
+        "order_total": order_total,
     })
 }
 
@@ -148,7 +185,7 @@ func UpdateCartQuantity(c *fiber.Ctx) error {
 
     // Find the product and cart item
     var product models.Product
-    if err := database.DB.First(&product, productId).Error; err != nil {
+    if err := database.DB.Preload("Offer").First(&product, productId).Error; err != nil {
         return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Product not found"})
     }
 
@@ -168,9 +205,22 @@ func UpdateCartQuantity(c *fiber.Ctx) error {
         })
     }
 
+    //Calculate the offer based on the product offer
+    originalPrice := product.Price
+	discountedPrice := originalPrice
+	var discountPercentage *float64
+
+
+	if product.Offer != nil && product.Offer.DiscountPercentage > 0 {
+        
+		discountPercentage = &product.Offer.DiscountPercentage
+		discountedPrice = originalPrice * (1 - *discountPercentage/100)
+	}
+
+
     // Update the cart item's quantity and total price
     cartItem.Quantity = cartItemRequest.Quantity
-    cartItem.TotalPrice = float64(cartItem.Quantity) * product.Price
+    cartItem.TotalPrice = float64(cartItem.Quantity) * discountedPrice
 
     if err := database.DB.Save(&cartItem).Error; err != nil {
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update cart item"})

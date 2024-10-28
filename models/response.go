@@ -2,15 +2,17 @@ package models
 
 // ProductResponse represents the structure of the product data sent to the client
 type ProductResponse struct {
-	ID            uint             `json:"id"`
-	Name          string           `json:"name"`
-	Description   string           `json:"description"`
-	Price         float64          `json:"price"`
-	StockQuantity int              `json:"stock_quantity"`
-	IsActive      bool             `json:"is_active"`
-	Category      CategoryResponse `json:"category"`
-	Store         StoreResponse    `json:"store"`
-	Images        []string         `json:"images"` // List of image URLs
+	ID                 uint             `json:"id"`
+	Name               string           `json:"name"`
+	Description        string           `json:"description"`
+	Price              float64          `json:"price"`
+	StockQuantity      int              `json:"stock_quantity"`
+	DiscountedPrice    *float64         `json:"discounted_price,omitempty"`    // Discounted price if offer exists
+	DiscountPercentage *float64         `json:"discount_percentage,omitempty"` // Discount percentage if offer exists
+	IsActive           bool             `json:"is_active"`
+	Category           CategoryResponse `json:"category"`
+	Store              StoreResponse    `json:"store"`
+	Images             []string         `json:"images"` // List of image URLs
 }
 type CategoryResponse struct {
 	ID            uint               `json:"id"`
@@ -34,7 +36,7 @@ type UserProfileResponse struct {
 }
 type StoreProfileResponse struct {
 	ID          uint   `json:"id"`
-	Name   string `json:"store_name"`
+	Name        string `json:"store_name"`
 	Description string `json:"description"`
 	Address     string `json:"address"`
 	City        string `json:"city"`
@@ -45,4 +47,11 @@ type StoreProfileResponse struct {
 
 type ForgetPasswordRequest struct {
 	Email string `json:"email" validate:"required,email"`
+}
+
+// WishlistResponse represents the response for the wishlist API
+type WishlistResponse struct {
+	Status   bool   `json:"status"`
+	Message  string `json:"message"`
+	Wishlist []ProductResponse
 }
