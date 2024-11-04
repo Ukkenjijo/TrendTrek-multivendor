@@ -54,7 +54,7 @@ type Store struct {
 	StoreImage  string `json:"store_image"` // Added StoreImage field
 	Certificate string `json:"certificate"`
 	UserID      uint
-	User        *User `gorm:"references:ID;foreignKey:UserID"`
+	User        *User     `gorm:"references:ID;foreignKey:UserID"`
 	Products    []Product `json:"products" gorm:"foreignKey:StoreID"`
 }
 
@@ -109,6 +109,8 @@ type Cart struct {
 	gorm.Model
 	UserID         uint       `json:"user_id"`
 	CartTotal      float64    `json:"cart_total"`
+	CouponID       *uint      `json:"coupon_id"`
+	Coupon         *Coupon    `json:"coupon,omitempty"`
 	CouponDiscount float64    `json:"coupon_discount"`
 	Items          []CartItem `json:"items" gorm:"foreignKey:CartID"`
 }
@@ -117,6 +119,7 @@ type CartItem struct {
 	gorm.Model
 	CartID             uint     `json:"cart_id"`
 	ProductID          uint     `json:"product_id"`
+	Product            Product  `json:"product" gorm:"foreignKey:ProductID"`
 	Quantity           int      `json:"quantity"`
 	Price              float64  `json:"price"`
 	DiscountedPrice    float64  `json:"discounted_price"`              // Unit price of the product
@@ -145,6 +148,7 @@ type OrderItem struct {
 	gorm.Model
 	OrderID      uint      `json:"order_id"`
 	ProductID    uint      `json:"product_id"`
+	Product      Product   `json:"product" gorm:"foreignKey:ProductID"`
 	Quantity     int       `json:"quantity"`
 	Price        float64   `json:"price"`
 	Status       string    `json:"status" gorm:"default:'pending'"` // individual item status
@@ -163,6 +167,7 @@ type Image struct {
 type Payment struct {
 	gorm.Model
 	OrderID           uint    `gorm:"not null" json:"order_id"`
+	UserID            uint    `json:"user_id"`
 	PaymentType       string  `gorm:"not null" json:"payment_type"`
 	RazorpayPaymentID string  `json:"razorpayment_id"`
 	PaymentStatus     string  `gorm:"default:'pending'" json:"payment_status"`
@@ -175,6 +180,7 @@ type OrderPaymentDetail struct {
 	PaymentType      string  `json:"payment_type"`
 	OrderAmount      float64 `json:"order_amount"`
 	OrderDiscount    float64 `json:"order_discount"`
+	CouponCode       string  `json:"coupon_code"`
 	CouponSavings    float64 `json:"coupon_savings"`
 	FinalOrderAmount float64 `json:"final_order_amount"`
 }
@@ -194,12 +200,12 @@ type Wallet struct {
 
 type WalletHistory struct {
 	gorm.Model
-	WalletID  uint   `json:"wallet_id"`
-	UserID    uint   `json:"user_id"`
+	WalletID  uint    `json:"wallet_id"`
+	UserID    uint    `json:"user_id"`
 	Amount    float64 `json:"amount"`
-	Operation string `json:"operation"` // "deposit", "withdrawal", etc.
-	Balance   float64 `json:"balance"`  // updated balance after operation
-	Reason    string `json:"reason"`    // optional reason for transaction
+	Operation string  `json:"operation"` // "deposit", "withdrawal", etc.
+	Balance   float64 `json:"balance"`   // updated balance after operation
+	Reason    string  `json:"reason"`    // optional reason for transaction
 }
 
 // Coupon represents a discount code in the system

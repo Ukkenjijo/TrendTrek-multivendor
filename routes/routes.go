@@ -26,6 +26,8 @@ func SetUpRoutes(app *fiber.App) {
 
 		privateadmin.Post("/coupons/add",controllers.CreateCoupon)
 		privateadmin.Get("/coupons",controllers.GetAllCoupons)
+		privateadmin.Get("/sales-report",controllers.GetSalesReportAdmin)
+		privateadmin.Get("/sales-report/pdf",controllers.GenerateSalesReportPDF)
 		
 
 		
@@ -111,6 +113,7 @@ func SetUpRoutes(app *fiber.App) {
 		privatestore.Patch("myaccount/store/profile/update",controllers.UpdateStoreProfile)
 		privatestore.Get("orders",controllers.ListSellerOrders)
 		privatestore.Put("orders/:order_id/:item_id/status",controllers.UpdateOrderItemStatus)
+		privatestore.Get("sales-report",controllers.GetSalesReport)
 		
 
 	}

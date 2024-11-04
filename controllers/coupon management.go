@@ -69,20 +69,7 @@ func ApplyCoupon(c *fiber.Ctx) error {
 	if err := database.DB.Where("user_id = ?", userID).First(&cart).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Cart not found", "data": err})
 	}
-	//check if the cart meets the total purchase amount requirement
-	if cart.CartTotal < coupon.MinPurchaseAmount {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "error", "message": "Cart total is less than the minimum purchase amount", })
-	}
-	//Calculate the discount amount
-	var discountAmount float64
-	discountAmount= cart.CartTotal * (coupon.Discount / 100)
-	//Cap the discount at maximum discount amount
-	if discountAmount > coupon.MaxDiscountAmount {
-		discountAmount = coupon.MaxDiscountAmount
-	}
-	//Apply the discount to the cart
-	cart.CouponDiscount = discountAmount
-	//Update the cart
+	cart.CouponID=&coupon.ID
 	if err := database.DB.Save(&cart).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Couldn't apply coupon", "data": err})
 	}
@@ -97,6 +84,7 @@ func RemoveCoupon(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Cart not found", "data": err})
 	}
 	//Reset the coupon discount
+	cart.CouponID = nil
 	cart.CouponDiscount = 0
 	//Update the cart
 	if err := database.DB.Save(&cart).Error; err != nil {

@@ -55,3 +55,15 @@ type WishlistResponse struct {
 	Message  string `json:"message"`
 	Wishlist []ProductResponse
 }
+
+type SalesReportSeller struct {
+	TotalSalesCount  int64     `json:"total_sales_count"`
+	TotalOrderAmount float64 `json:"total_order_amount"`
+	TotalDiscounts   float64 `json:"total_discounts"`
+	PendingCount     int64     `json:"pending_count"`
+	ReturnedCount    int64     `json:"returned_count"`
+	CompletedCount   int64     `json:"completed_count"`
+	
+}
+
+

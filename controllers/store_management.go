@@ -11,6 +11,7 @@ import (
 	"github.com/Ukkenjijo/trendtrek/models"
 	"github.com/Ukkenjijo/trendtrek/utils"
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // AddProduct handles the creation of a new product with an image upload
@@ -432,4 +433,25 @@ func UpdateProductStock(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Product stock updated successfully",
 	})
+}
+
+func ReducestockandDeleteCart(tx *gorm.DB, cart *models.Cart) error {
+	var cartItems []models.CartItem
+	if err := tx.Where("cart_id = ?", cart.ID).Find(&cartItems).Error; err != nil {
+		return err
+	}
+	for _, cartItem := range cartItems {
+		var product models.Product
+		if err := tx.Where("id = ?", cartItem.ProductID).First(&product).Error; err != nil {
+			return err
+		}
+		product.StockQuantity -= cartItem.Quantity
+		if err := tx.Save(&product).Error; err != nil {
+			return err
+		}
+	}
+	if err := tx.Delete(cart).Error; err != nil {
+		return err
+	}
+	return nil
 }
