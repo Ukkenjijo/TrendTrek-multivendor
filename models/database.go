@@ -182,6 +182,7 @@ type OrderPaymentDetail struct {
 	OrderDiscount    float64 `json:"order_discount"`
 	CouponCode       string  `json:"coupon_code"`
 	CouponSavings    float64 `json:"coupon_savings"`
+	ShippingCost     float64 `json:"shipping_cost"`
 	FinalOrderAmount float64 `json:"final_order_amount"`
 }
 

@@ -23,12 +23,15 @@ func SetUpRoutes(app *fiber.App) {
 		privateadmin.Post("/categories/add",controllers.AddCategory)
 		privateadmin.Patch("/categories/edit/:id",controllers.EditCategory)
 		privateadmin.Delete("/categories/delete/:id",controllers.DeleteCategory)
+		privateadmin.Post("/order/:order_id/status",controllers.UpdateOrderStatus)
 
 		privateadmin.Post("/coupons/add",controllers.CreateCoupon)
 		privateadmin.Get("/coupons",controllers.GetAllCoupons)
 		privateadmin.Get("/sales-report",controllers.GetSalesReportAdmin)
 		privateadmin.Get("/sales-report/pdf",controllers.GenerateSalesReportPDF)
-		
+		privateadmin.Get("/admin_dashboard/top_products",controllers.GetTopProducts)
+		privateadmin.Get("/admin_dashboard/top_categories",controllers.GetTopCategories)
+		privateadmin.Get("/admin_dashboard/top_sellers",controllers.GetTopSellers)
 
 		
 	}
@@ -74,8 +77,10 @@ func SetUpRoutes(app *fiber.App) {
 		privateuser.Delete("wishlist/remove/:product_id",controllers.RemoveFromWishlist)
 		privateuser.Get("wishlist",controllers.GetWishlist)
 		privateuser.Post("checkout/orders",controllers.PlaceOrder)
+		privateuser.Post("order/:order_id/retry_payment",controllers.RetryPayment)
 		privateuser.Get("orders",controllers.ListOrders)
 		privateuser.Get("orders/:id",controllers.GetOrderDetails)
+		privateuser.Get("orders/:order_id/invoice",controllers.GenerateInvoicePdf)
 		privateuser.Put("orders/cancel/:id",controllers.CancelOrder)
 		privateuser.Patch("orders/return/:id", controllers.ReturnOrderItem)
 		privateuser.Post("coupons/apply",controllers.ApplyCoupon)
@@ -114,6 +119,7 @@ func SetUpRoutes(app *fiber.App) {
 		privatestore.Get("orders",controllers.ListSellerOrders)
 		privatestore.Put("orders/:order_id/:item_id/status",controllers.UpdateOrderItemStatus)
 		privatestore.Get("sales-report",controllers.GetSalesReport)
+		
 		
 
 	}

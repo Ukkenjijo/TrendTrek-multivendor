@@ -62,6 +62,10 @@ func PlaceOrder(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cart is empty"})
 	}
 
+	if cart.CartTotal <=100 && req.PaymentMode != "COD" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Minimum order amount is 100"})
+	}
+
 	// Begin transaction
 	tx := database.DB.Begin()
 	defer tx.Rollback()
@@ -104,7 +108,7 @@ func PlaceOrder(c *fiber.Ctx) error {
 			OrderID:    order.ID,
 			ProductID:  item.ProductID,
 			Quantity:   item.Quantity,
-			Price:      item.Price,
+			Price:      item.DiscountedPrice,
 			TotalPrice: item.TotalPrice,
 		}
 		cartOrginal += item.Price
@@ -124,6 +128,11 @@ func PlaceOrder(c *fiber.Ctx) error {
 	}
 	orderPaymentDetail.CouponSavings = cart.CouponDiscount
 	orderPaymentDetail.FinalOrderAmount = totalAmount
+	if totalAmount > 500 {
+		orderPaymentDetail.ShippingCost = 0
+	}else{
+		orderPaymentDetail.ShippingCost = 50
+	}
 
 	// Create the payment
 	var payment models.Payment

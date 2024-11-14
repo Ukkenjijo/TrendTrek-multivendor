@@ -92,3 +92,5 @@ func RemoveCoupon(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"status": "success", "message": "Coupon removed successfully", "data": nil})
 }
+
+

@@ -3,6 +3,8 @@ package controllers
 import (
 	"fmt"
 	"log"
+	"math"
+	
 
 	"github.com/Ukkenjijo/trendtrek/database"
 	"github.com/Ukkenjijo/trendtrek/models"
@@ -135,7 +137,7 @@ func ListCartItems(c *fiber.Ctx) error {
 	var totalAmount, product_discount float64
 	for _, item := range cart.Items {
 		totalAmount += item.TotalPrice
-		product_discount = (item.Price - item.DiscountedPrice) * float64(item.Quantity)
+		product_discount += (item.Price - item.DiscountedPrice) * float64(item.Quantity)
 	}
 
 	cart.CartTotal = totalAmount
@@ -185,6 +187,7 @@ func ListCartItems(c *fiber.Ctx) error {
 			"quantity":      item.Quantity,
 			"price":         fmt.Sprintf("%.2f", item.Price),
 			"total_price":   fmt.Sprintf("%.2f", item.TotalPrice),
+			"total_discount": math.RoundToEven(item.Price-item.DiscountedPrice) * float64(item.Quantity),
 			"product_name":  item.Product.Name,
 			"product_image": item.Product.Images[0].URL,
 		})
@@ -194,7 +197,7 @@ func ListCartItems(c *fiber.Ctx) error {
 		"items":            itemsResponse,
 		"total_amount":     fmt.Sprintf("%.2f", cart.CartTotal),
 		"coupon_discount":  fmt.Sprintf("%.2f", cart.CouponDiscount),
-		"product_discount": fmt.Sprintf("%.2f", product_discount),
+		"toatl_product_discounts": fmt.Sprintf("%.2f", product_discount),
 		"total_items":      len(cart.Items),
 	})
 }

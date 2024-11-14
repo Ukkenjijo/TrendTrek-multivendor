@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Razorpay Payment Test</title>
+    <title>Retry Payment - Razorpay</title>
     
     <!-- Include Razorpay Checkout Script -->
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -13,42 +13,30 @@
     <script src="//unpkg.com/alpinejs" defer></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div x-data="paymentHandler()" class="container mx-auto px-4 py-8 max-w-md">
+    <div x-data="retryPaymentHandler()" class="container mx-auto px-4 py-8 max-w-md">
         <div class="bg-white rounded-lg shadow-lg p-6">
-            <h1 class="text-2xl font-bold text-center text-gray-800 mb-8">Razorpay Payment Integration</h1>
+            <h1 class="text-2xl font-bold text-center text-gray-800 mb-8">Retry Payment</h1>
 
-            <!-- Order form -->
-            <form @submit.prevent="placeOrder" class="space-y-6">
+            <!-- Order ID Input -->
+            <div class="space-y-4">
                 <div class="space-y-2">
-                    <label for="address" class="block text-sm font-medium text-gray-700">Address ID:</label>
+                    <label for="order_id" class="block text-sm font-medium text-gray-700">Order ID:</label>
                     <input 
                         type="text" 
-                        id="address" 
-                        x-model="orderDetails.address_id" 
+                        id="order_id" 
+                        x-model="orderDetails.order_id" 
                         required
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                     >
                 </div>
-                
-                <div class="space-y-2">
-                    <label for="payment_mode" class="block text-sm font-medium text-gray-700">Payment Mode:</label>
-                    <select 
-                        id="payment_mode" 
-                        x-model="orderDetails.payment_mode"
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-                    >
-                        <option value="razorpay">Razorpay</option>
-                        <option value="COD">Cash on Delivery</option>
-                    </select>
-                </div>
 
                 <button 
-                    type="submit"
+                    @click="fetchOrderDetails"
                     class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
                 >
-                    Place Order
+                    Fetch Order & Retry Payment
                 </button>
-            </form>
+            </div>
 
             <!-- Display for errors or success -->
             <div 
@@ -70,43 +58,41 @@
     </div>
 
     <script>
-        function paymentHandler() {
+        function retryPaymentHandler() {
             return {
                 orderDetails: {
-                    address_id: '',
-                    payment_mode: 'razorpay'
+                    order_id: ''
                 },
                 errorMessage: '',
                 successMessage: '',
+                jwtToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo2LCJlbWFpbCI6InNhanVhbGVlbmExQGdtYWlsLmNvbSIsInJvbGUiOiJjdXN0b21lciIsImV4cCI6MTczMTgxOTA4MH0.57Bn9Pjep62HXlr78rubnZbjgQCqOv-1Okevnt_rCdY",  // replace with actual JWT token
 
-                async placeOrder() {
+                async fetchOrderDetails() {
                     this.errorMessage = '';
                     this.successMessage = '';
-                    this.jwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo2LCJlbWFpbCI6InNhanVhbGVlbmExQGdtYWlsLmNvbSIsInJvbGUiOiJjdXN0b21lciIsImV4cCI6MTczMTgxOTA4MH0.57Bn9Pjep62HXlr78rubnZbjgQCqOv-1Okevnt_rCdY";
+
+                    if (!this.orderDetails.order_id) {
+                        this.errorMessage = "Please enter a valid order ID";
+                        return;
+                    }
 
                     try {
-                        let response = await fetch('http://localhost:3000/api/v1/user/checkout/orders', {
+                        let response = await fetch(`http://localhost:3000/api/v1/user/order/${this.orderDetails.order_id}/retry_payment`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${this.jwtToken}`
-                            },
-                            body: JSON.stringify(this.orderDetails)
+                            }
                         });
-                        console.log(this.orderDetails)
 
                         let data = await response.json();
 
                         if (!response.ok) {
-                            throw new Error(data.error || 'Failed to place order');
+                            throw new Error(data.error || 'Failed to retry payment');
                         }
 
-                        if (this.orderDetails.payment_mode === 'razorpay') {
-                            this.startRazorpayPayment(data);
-                        } else {
-                            this.successMessage = "Order placed successfully with COD!";
-                        }
-
+                        // Start Razorpay Payment if order details are returned successfully
+                        this.startRazorpayPayment(data);
                     } catch (error) {
                         this.errorMessage = error.message || "An error occurred";
                     }
@@ -114,11 +100,11 @@
 
                 startRazorpayPayment(orderData) {
                     var options = {
-                        "key": "rzp_test_4TyJkSMMUMO64l",
+                        "key": "rzp_test_4TyJkSMMUMO64l",  // Replace with actual Razorpay key ID
                         "amount": orderData.amount * 100,
                         "currency": orderData.currency,
                         "name": "Test Store",
-                        "description": "Test Transaction",
+                        "description": "Order Payment Retry",
                         "order_id": orderData.razorpay_order_id,
                         "handler": (response) => {
                             this.confirmPayment(response);
@@ -158,7 +144,7 @@
                             throw new Error(data.error || 'Failed to verify payment');
                         }
 
-                        this.successMessage = "Payment successful! Order placed.";
+                        this.successMessage = "Payment successful! Order has been processed.";
                     } catch (error) {
                         this.errorMessage = error.message || "Payment verification failed.";
                     }

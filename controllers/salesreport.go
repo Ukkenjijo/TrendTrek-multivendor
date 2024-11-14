@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"github.com/Ukkenjijo/trendtrek/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jung-kurt/gofpdf"
+	chart "github.com/wcharczuk/go-chart"
 	"gorm.io/gorm"
 )
 
@@ -194,6 +196,25 @@ func GetSalesReportAdmin(c *fiber.Ctx) error {
 
 }
 
+type PaymentData struct {
+	COD      int64
+	Razorpay int64
+	Wallet   int64
+}
+
+type FinancialData struct {
+	TotalOrderAmount float64
+	FinalOrderAmount float64
+	TotalDiscounts   float64
+	CouponDeductions float64
+}
+
+type OrderStatusData struct {
+	Pending   int64
+	Completed int64
+	Returned  int64
+}
+
 // GenerateSalesReportPDF generates a PDF for the sales report
 func GenerateSalesReportPDF(c *fiber.Ctx) error {
 	// Retrieve the sales report data based on your GetSalesReport function
@@ -279,41 +300,71 @@ func GenerateSalesReportPDF(c *fiber.Ctx) error {
 	}
 
 	// Create a new PDF document
+	// Create PDF with custom styling
 	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.SetTitle("Sales Report", false)
+	pdf.SetMargins(10, 10, 10)
+
+	// Add first page
 	pdf.AddPage()
+	// Add company logo (assuming you have a logo.png in your assets)
 
-	// Set header font and title
-	pdf.SetFont("Arial", "B", 16)
-	pdf.Cell(190, 10, "Sales Report")
-	pdf.Ln(20) // Line break
+	pdf.ImageOptions("uploads/logo.jpg", 10, 10, 30, 0, false, gofpdf.ImageOptions{ImageType: "jpg"}, 0, "")
 
-	// Set regular font for the rest of the report
-	pdf.SetFont("Arial", "", 12)
+	// Header section
+	pdf.SetFont("Arial", "B", 20)
+	pdf.SetTextColor(44, 62, 80) // Dark blue color
+	pdf.CellFormat(190, 10, "Sales Report", "", 1, "C", false, 0, "")
+	pdf.Ln(8)
 
-	// Add report details
-	pdf.Cell(190, 10, fmt.Sprintf("Date Range: %s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
-	pdf.Ln(10)
+	// Subheader with date range
+	pdf.SetFont("Arial", "I", 12)
+	pdf.SetTextColor(127, 140, 141) // Gray color
+	pdf.CellFormat(190, 10, fmt.Sprintf("Period: %s to %s",
+		startDate.Format("January 2, 2006"),
+		endDate.Format("January 2, 2006")), "", 1, "C", false, 0, "")
+	pdf.Ln(20)
 
-	reportData := []string{
-		fmt.Sprintf("Total Sales Count: %d", totalSalesCount),
-		fmt.Sprintf("Total Order Amount: $%.2f", totalOrderAmount),
-		fmt.Sprintf("Total Discounts: $%.2f", totalDiscounts),
-		fmt.Sprintf("Final Order Amount before Discounts: $%.2f", finalOrderAmount),
-		fmt.Sprintf("No. of COD Transactions: %d", codCount),
-		fmt.Sprintf("No. of Razorpay Transactions: %d", razorpayCount),
-		fmt.Sprintf("No. of Wallet Transactions: %d", walletCount),
-		fmt.Sprintf("Coupon Deductions: $%.2f", math.Abs(couponDeductions)),
-		fmt.Sprintf("No. of Pending Orders: %d", pendingCount),
-		fmt.Sprintf("No. of Returned Orders: %d", returnedCount),
-		fmt.Sprintf("No. of Completed Orders: %d", completedCount),
+	// Summary section
+	addSummarySection(pdf, SummaryData{
+		TotalSales:      totalSalesCount,
+		Revenue:         finalOrderAmount,
+		TotalDiscounts:  totalDiscounts,
+		CompletedOrders: completedCount,
+	})
+	pdf.Ln(15)
+
+	addPaymentMethodsSection(pdf, PaymentData{
+		COD:      codCount,
+		Razorpay: razorpayCount,
+		Wallet:   walletCount,
+	})
+	pdf.Ln(15)
+
+	// Order Status Breakdown
+	addOrderStatusSection(pdf, OrderStatusData{
+		Pending:   pendingCount,
+		Completed: completedCount,
+		Returned:  returnedCount,
+	})
+	pdf.Ln(15)
+
+	// Financial Details
+	addFinancialDetailsSection(pdf, FinancialData{
+		TotalOrderAmount: totalOrderAmount,
+		FinalOrderAmount: finalOrderAmount,
+		TotalDiscounts:   totalDiscounts,
+		CouponDeductions: couponDeductions,
+	})
+	pdf.Ln(15)
+
+	// Generate and embed charts in the PDF
+	err := generateAndEmbedCharts(pdf, codCount, razorpayCount, walletCount, pendingCount, completedCount, returnedCount)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate charts"})
 	}
 
-	// Add report data to PDF
-	for _, line := range reportData {
-		pdf.Cell(190, 10, line)
-		pdf.Ln(10) // Line break
-	}
+	// Footer
+	addFooter(pdf)
 
 	// Set a filename for the PDF
 	filename := fmt.Sprintf("sales_report_%s.pdf", time.Now().Format("20060102150405"))
@@ -325,4 +376,157 @@ func GenerateSalesReportPDF(c *fiber.Ctx) error {
 
 	// Serve the PDF file as a downloadable response
 	return c.SendFile(filename)
+}
+
+type SummaryData struct {
+	TotalSales      int64
+	Revenue         float64
+	TotalDiscounts  float64
+	CompletedOrders int64
+}
+
+func addSectionHeader(pdf *gofpdf.Fpdf, title string) {
+	pdf.SetFont("Arial", "B", 14)
+	pdf.SetTextColor(44, 62, 80)
+	pdf.CellFormat(190, 10, title, "", 1, "L", false, 0, "")
+	pdf.Ln(5)
+}
+
+func addSummarySection(pdf *gofpdf.Fpdf, data SummaryData) {
+	addSectionHeader(pdf, "Summary")
+
+	// Create a grid for key metrics
+	pdf.SetFont("Arial", "B", 12)
+	pdf.SetFillColor(249, 249, 249)
+
+	// Row 1
+	pdf.CellFormat(95, 20, fmt.Sprintf("Total Sales: %d", data.TotalSales), "1", 0, "L", true, 0, "")
+	pdf.CellFormat(95, 20, fmt.Sprintf("Revenue: $%.2f", data.Revenue), "1", 1, "L", true, 0, "")
+
+	// Row 2
+	pdf.CellFormat(95, 20, fmt.Sprintf("Total Discounts: $%.2f", data.TotalDiscounts), "1", 0, "L", true, 0, "")
+	pdf.CellFormat(95, 20, fmt.Sprintf("Completed Orders: %d", data.CompletedOrders), "1", 1, "L", true, 0, "")
+}
+
+func addPaymentMethodsSection(pdf *gofpdf.Fpdf, data PaymentData) {
+	addSectionHeader(pdf, "Payment Methods")
+
+	// Table header
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetFillColor(240, 240, 240)
+
+	// Header row
+	pdf.CellFormat(47.5, 10, "COD", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(47.5, 10, "Razorpay", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(47.5, 10, "Wallet", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(47.5, 10, "Total", "1", 1, "C", true, 0, "")
+
+	// Data row
+	pdf.SetFont("Arial", "", 10)
+	total := data.COD + data.Razorpay + data.Wallet
+	pdf.CellFormat(47.5, 10, fmt.Sprintf("%d", data.COD), "1", 0, "C", false, 0, "")
+	pdf.CellFormat(47.5, 10, fmt.Sprintf("%d", data.Razorpay), "1", 0, "C", false, 0, "")
+	pdf.CellFormat(47.5, 10, fmt.Sprintf("%d", data.Wallet), "1", 0, "C", false, 0, "")
+	pdf.CellFormat(47.5, 10, fmt.Sprintf("%d", total), "1", 1, "C", false, 0, "")
+}
+
+func addOrderStatusSection(pdf *gofpdf.Fpdf, data OrderStatusData) {
+	addSectionHeader(pdf, "Order Status Breakdown")
+
+	total := float64(data.Pending + data.Completed + data.Returned)
+
+	// Table header
+	pdf.SetFont("Arial", "B", 10)
+	pdf.SetFillColor(240, 240, 240)
+	pdf.CellFormat(63.3, 10, "Status", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(63.3, 10, "Count", "1", 0, "C", true, 0, "")
+	pdf.CellFormat(63.3, 10, "Percentage", "1", 1, "C", true, 0, "")
+
+	// Data rows
+	pdf.SetFont("Arial", "", 10)
+	addOrderStatusRow(pdf, "Pending", data.Pending, total)
+	addOrderStatusRow(pdf, "Completed", data.Completed, total)
+	addOrderStatusRow(pdf, "Returned", data.Returned, total)
+}
+
+func addOrderStatusRow(pdf *gofpdf.Fpdf, status string, count int64, total float64) {
+	percentage := (float64(count) / total) * 100
+	pdf.CellFormat(63.3, 10, status, "1", 0, "C", false, 0, "")
+	pdf.CellFormat(63.3, 10, fmt.Sprintf("%d", count), "1", 0, "C", false, 0, "")
+	pdf.CellFormat(63.3, 10, fmt.Sprintf("%.1f%%", percentage), "1", 1, "C", false, 0, "")
+}
+
+func addFinancialDetailsSection(pdf *gofpdf.Fpdf, data FinancialData) {
+	addSectionHeader(pdf, "Financial Details")
+
+	pdf.SetFont("Arial", "", 12)
+	pdf.SetFillColor(249, 249, 249)
+
+	// Add financial rows
+	addFinancialRow(pdf, "Total Order Amount:", fmt.Sprintf("$%.2f", data.TotalOrderAmount))
+	addFinancialRow(pdf, "Total Discounts:", fmt.Sprintf("$%.2f", data.TotalDiscounts))
+	addFinancialRow(pdf, "Coupon Deductions:", fmt.Sprintf("$%.2f", math.Abs(data.CouponDeductions)))
+
+	// Final amount in bold
+	pdf.SetFont("Arial", "B", 12)
+	addFinancialRow(pdf, "Final Order Amount:", fmt.Sprintf("$%.2f", data.FinalOrderAmount))
+}
+
+func addFinancialRow(pdf *gofpdf.Fpdf, label, value string) {
+	pdf.CellFormat(95, 10, label, "1", 0, "L", true, 0, "")
+	pdf.CellFormat(95, 10, value, "1", 1, "L", true, 0, "")
+}
+
+func addFooter(pdf *gofpdf.Fpdf) {
+	pdf.Ln(10)
+	pdf.SetFont("Arial", "I", 8)
+	pdf.SetTextColor(127, 140, 141)
+	pdf.CellFormat(190, 200,
+		fmt.Sprintf("Generated on %s", time.Now().Format("January 2, 2006 15:04 MST")),
+		"", 1, "L", false, 0, "")
+}
+
+// Generates and embeds pie and bar charts
+func generateAndEmbedCharts(pdf *gofpdf.Fpdf, codCount, razorpayCount, walletCount, pendingCount, completedCount, returnedCount int64) error {
+	// Generate Payment Method Pie Chart
+	paymentChart := chart.PieChart{
+		Width:  256,
+		Height: 256,
+		Values: []chart.Value{
+			{Value: float64(codCount), Label: "COD"},
+			{Value: float64(razorpayCount), Label: "Razorpay"},
+			{Value: float64(walletCount), Label: "Wallet"},
+		},
+	}
+
+	// Generate Order Status Pie Chart
+	orderStatusChart := chart.PieChart{
+		Width:  256,
+		Height: 256,
+		Values: []chart.Value{
+			{Value: float64(pendingCount), Label: "Pending"},
+			{Value: float64(completedCount), Label: "Completed"},
+			{Value: float64(returnedCount), Label: "Returned"},
+		},
+	}
+
+	// Encode and embed payment chart image
+	buffer := new(bytes.Buffer)
+	err := paymentChart.Render(chart.PNG, buffer)
+	if err != nil {
+		return err
+	}
+	pdf.RegisterImageOptionsReader("payment_chart", gofpdf.ImageOptions{ImageType: "PNG"}, buffer)
+	pdf.ImageOptions("payment_chart", 15, 60, 80, 80, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+
+	// Encode and embed order status chart image
+	buffer.Reset()
+	err = orderStatusChart.Render(chart.PNG, buffer)
+	if err != nil {
+		return err
+	}
+	pdf.RegisterImageOptionsReader("order_status_chart", gofpdf.ImageOptions{ImageType: "PNG"}, buffer)
+	pdf.ImageOptions("order_status_chart", 110, 60, 80, 80, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+
+	return nil
 }
