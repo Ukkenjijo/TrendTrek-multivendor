@@ -252,10 +252,12 @@ func GenerateSalesReportPDF(c *fiber.Ctx) error {
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid date format"})
 		}
-		endDate = endDate.Add(24 * time.Hour)
+		
 	default:
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid range option"})
 	}
+	log.Println("Start Date:", startDate)
+	log.Println("End Date:", endDate)
 
 	// Initialize the metrics as in GetSalesReportAdmin
 	var totalSalesCount, codCount, razorpayCount, walletCount, pendingCount, returnedCount, completedCount int64
@@ -269,6 +271,9 @@ func GenerateSalesReportPDF(c *fiber.Ctx) error {
 		})
 	}).Where("created_at BETWEEN ? AND ?", startDate, endDate).Find(&orders).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve orders"})
+	}
+	if len(orders) == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "No orders found in the specified date range"})
 	}
 
 	// Calculate totals
@@ -360,6 +365,7 @@ func GenerateSalesReportPDF(c *fiber.Ctx) error {
 	// Generate and embed charts in the PDF
 	err := generateAndEmbedCharts(pdf, codCount, razorpayCount, walletCount, pendingCount, completedCount, returnedCount)
 	if err != nil {
+		log.Println(err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate charts"})
 	}
 

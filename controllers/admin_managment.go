@@ -374,7 +374,7 @@ func GetCategoryByID(c *fiber.Ctx) error {
 }
 
 func UpdateOrderStatus(c *fiber.Ctx) error {
-	orderID := c.Params("id")
+	orderID := c.Params("order_id")
     req:=new(models.StatusRequest)
 	var order models.Order
 	if err := c.BodyParser(&req); err != nil {

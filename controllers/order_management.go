@@ -23,7 +23,7 @@ func InitRazorpay() {
 	razorpayClient = razorpay.NewClient(os.Getenv("RAZORPAY_KEY"), os.Getenv("RAZORPAY_SECRET"))
 }
 func roundAmount(amount *float64) {
-	*amount=math.Round(*amount*100) / 100
+	*amount = math.Round(*amount*100) / 100
 }
 
 // PlaceOrder function with Razorpay payment integration
@@ -62,8 +62,10 @@ func PlaceOrder(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cart is empty"})
 	}
 
-	if cart.CartTotal <=100 && req.PaymentMode != "COD" {
+	if cart.CartTotal <= 100.0 && req.PaymentMode != "COD" {
+		log.Println(cart.CartTotal)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Minimum order amount is 100"})
+
 	}
 
 	// Begin transaction
@@ -130,7 +132,7 @@ func PlaceOrder(c *fiber.Ctx) error {
 	orderPaymentDetail.FinalOrderAmount = totalAmount
 	if totalAmount > 500 {
 		orderPaymentDetail.ShippingCost = 0
-	}else{
+	} else {
 		orderPaymentDetail.ShippingCost = 50
 	}
 
@@ -319,7 +321,7 @@ func CancelOrder(c *fiber.Ctx) error {
 	tx := database.DB.Begin()
 	defer tx.Rollback()
 
-	if err := tx.Where("id = ? AND user_id = ?", orderId, userId).First(&order).Error; err != nil {
+	if err := tx.Preload("Items").Where("id = ? AND user_id = ?", orderId, userId).First(&order).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Order not found"})
 	}
 
@@ -346,6 +348,7 @@ func CancelOrder(c *fiber.Ctx) error {
 		}
 		//set status to canceled
 		item.Status = "canceled"
+		log.Println(item.Status)
 		if err := tx.Save(&item).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to cancel order item"})
 		}
@@ -424,11 +427,15 @@ func CancelOrderItem(c *fiber.Ctx) error {
 	//calculate the proptotional refund amount
 
 	if orderPaymentDetails.CouponSavings > 0 {
+
 		discountratio := orderPaymentDetails.CouponSavings / orderPaymentDetails.FinalOrderAmount
+
+
 		itemdiscount = orderItem.TotalPrice * discountratio
 
 		refundAmount = refundAmount - itemdiscount
 	}
+	roundAmount(&refundAmount)
 
 	// Update the order item status to "canceled"
 	orderItem.Status = "canceled"
@@ -446,8 +453,11 @@ func CancelOrderItem(c *fiber.Ctx) error {
 	}
 	//update the order's total amount
 	order.TotalAmount -= orderItem.TotalPrice
+	roundAmount(&order.TotalAmount)
 	orderPaymentDetails.CouponSavings -= itemdiscount
+	roundAmount(&orderPaymentDetails.CouponSavings)
 	orderPaymentDetails.FinalOrderAmount -= orderItem.TotalPrice
+	roundAmount(&orderPaymentDetails.FinalOrderAmount)
 	if err := tx.Save(&orderPaymentDetails).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order amount"})
 	}
@@ -464,6 +474,7 @@ func CancelOrderItem(c *fiber.Ctx) error {
 	}
 	//return the total amount to the user
 	wallet.Balance += refundAmount
+	roundAmount(&wallet.Balance)
 
 	// Create a new wallet transaction
 	walletTransaction := models.WalletHistory{
