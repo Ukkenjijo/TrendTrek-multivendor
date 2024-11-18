@@ -407,104 +407,98 @@ func CancelOrderItem(c *fiber.Ctx) error {
 
 	// Find the order item
 	var orderItem models.OrderItem
-	if err := tx.Where("order_id = ? AND product_id = ?", orderId, itemId).First(&orderItem).Error; err != nil {
+	if err := tx.Preload("Product").Where("order_id = ? AND id = ?", orderId, itemId).First(&orderItem).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Order item not found"})
+	}
+	var orderPaymentDetails models.OrderPaymentDetail
+	if err := tx.Where("order_id = ?", orderId).First(&orderPaymentDetails).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Order payment details not found"})
 	}
 	//Only pending items can be cancelled
 	if orderItem.Status != "pending" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Order item cannot be canceled"})
 	}
-	//calcualte the refund amount
-	refundAmount := orderItem.TotalPrice
-
-	var itemdiscount float64
-
-	//get the orderpaymentdetails
-	var orderPaymentDetails models.OrderPaymentDetail
-	if err := tx.Where("order_id = ?", orderId).First(&orderPaymentDetails).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to get order payment details"})
-	}
-	//calculate the proptotional refund amount
-
-	if orderPaymentDetails.CouponSavings > 0 {
-
-		discountratio := orderPaymentDetails.CouponSavings / orderPaymentDetails.FinalOrderAmount
-
-
-		itemdiscount = orderItem.TotalPrice * discountratio
-
-		refundAmount = refundAmount - itemdiscount
-	}
-	roundAmount(&refundAmount)
-
-	// Update the order item status to "canceled"
+	//set the status to canceled
 	orderItem.Status = "canceled"
+
+	//check if the coupon is still valid after canceling the order
+	var coupon models.Coupon
+	if err := tx.Where("code = ?", orderPaymentDetails.CouponCode).First(&coupon).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Coupon not found"})
+	}
+    log.Println(order.TotalAmount,"fff",orderPaymentDetails.CouponSavings)
+	order.TotalAmount = order.TotalAmount-orderItem.TotalPrice + orderPaymentDetails.CouponSavings 
+	log.Println(order.TotalAmount,"dd",orderItem.TotalPrice,orderPaymentDetails.CouponSavings)
+	orderPaymentDetails.OrderAmount -= orderItem.Product.Price
+	orderPaymentDetails.OrderDiscount -= (orderItem.Product.Price * float64(orderItem.Quantity)) - orderItem.TotalPrice
+
+	refundAmount := 0.0
+	//check if the remaining order amount meets the coupon requirement
+	if order.TotalAmount >= coupon.MinPurchaseAmount {
+		orderPaymentDetails.CouponSavings = order.TotalAmount * (coupon.Discount / 100)
+		log.Println(orderPaymentDetails.CouponSavings)
+
+		refundAmount = orderPaymentDetails.FinalOrderAmount - order.TotalAmount + orderPaymentDetails.CouponSavings
+		log.Println(refundAmount,"refund amount")
+
+		orderPaymentDetails.FinalOrderAmount = order.TotalAmount - orderPaymentDetails.CouponSavings
+		order.TotalAmount = order.TotalAmount - orderPaymentDetails.CouponSavings
+	} else {
+		orderPaymentDetails.CouponSavings = 0
+		orderPaymentDetails.CouponCode = ""
+		refundAmount = orderPaymentDetails.FinalOrderAmount - order.TotalAmount
+		orderPaymentDetails.FinalOrderAmount -= refundAmount
+	}
+
 	if err := tx.Save(&orderItem).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to cancel order item"})
 	}
 
-	// Return stock back to the product
+	if err := tx.Save(&order).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order"})
+	}
+
+	if err := tx.Save(&orderPaymentDetails).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order payment details"})
+	}
+	//add the refund amount to the wallet
+	var wallet models.Wallet
+	if err := tx.Where("user_id = ?", userId).First(&wallet).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Wallet not found"})
+	}
+	wallet.Balance += refundAmount
+	if err := tx.Save(&wallet).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update wallet"})
+	}
+	//create transaction history
+	history := models.WalletHistory{
+		WalletID:  wallet.ID,
+		Amount:    refundAmount,
+		UserID:    uint(userId.(float64)),
+		Operation: "Refund",
+		Balance:   wallet.Balance,
+		Reason:    "Order cancellation refund",
+	}
+	if err := tx.Create(&history).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create wallet history"})
+	}
+	
+	//return back the stock that was canceled
 	var product models.Product
-	if err := tx.First(&product, orderItem.ProductID).Error; err == nil {
+	if err:=tx.First(&product,orderItem.ProductID).Error;err == nil{
 		product.StockQuantity += orderItem.Quantity
 		if err := tx.Save(&product).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to return stock"})
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update product"})
 		}
 	}
-	//update the order's total amount
-	order.TotalAmount -= orderItem.TotalPrice
-	roundAmount(&order.TotalAmount)
-	orderPaymentDetails.CouponSavings -= itemdiscount
-	roundAmount(&orderPaymentDetails.CouponSavings)
-	orderPaymentDetails.FinalOrderAmount -= orderItem.TotalPrice
-	roundAmount(&orderPaymentDetails.FinalOrderAmount)
-	if err := tx.Save(&orderPaymentDetails).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order amount"})
-	}
 
-	if err := tx.Save(&orderItem).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order amount"})
-	}
 
-	//Now add that money to the user wallet
-	//get the user wallet
-	var wallet models.Wallet
-	if err := tx.First(&wallet, order.UserID).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to get user wallet"})
-	}
-	//return the total amount to the user
-	wallet.Balance += refundAmount
-	roundAmount(&wallet.Balance)
 
-	// Create a new wallet transaction
-	walletTransaction := models.WalletHistory{
-		UserID:    order.UserID,
-		Amount:    refundAmount,
-		Reason:    "Refund",
-		Operation: "credit",
-		Balance:   wallet.Balance,
-		WalletID:  wallet.ID,
-	}
-	if err := tx.Save(&order).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update order amount"})
-	}
-
-	if err := tx.Save(&wallet).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to return money to user's wallet"})
-	}
-	if err := tx.Create(&walletTransaction).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create wallet transaction"})
-	}
-
-	// Commit the transaction
 	if err := tx.Commit().Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Transaction failed"})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":  "Order item canceled successfully",
-		"order_id": order.ID,
-	})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Order item canceled successfully"})
 
 }
 

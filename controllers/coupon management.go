@@ -18,6 +18,11 @@ func CreateCoupon(c *fiber.Ctx) error {
 	if err := utils.ValidateStruct(couponreq); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Review your input", "data": err})
 	}
+	//check if the coupon alredy exists
+	var existingCoupon models.Coupon
+	if err := database.DB.Where("code = ?", couponreq.Code).First(&existingCoupon).Error; err == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Coupon already exists", "data": err})
+	}
 	//parse the expiration date
 	expirationDate, err := time.Parse(time.RFC3339, couponreq.ExpiresAt)
 	if err != nil {
