@@ -23,7 +23,7 @@ var ClientSecret=os.Getenv("GOOGLE_CLIENT_SECRET")
 var googleOauthConfig = &oauth2.Config{
 	ClientID:     ClientID,                                            // Get from environment
 	ClientSecret: ClientSecret,               // Get from environment
-	RedirectURL:  "http://localhost:3000/api/v1/user/google/callback", // The URL to redirect after login
+	RedirectURL:  "https://jijoshibuukken.website/api/v1/user/google/callback", // The URL to redirect after login
 	Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 	Endpoint:     google.Endpoint,
 }

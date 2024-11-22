@@ -62,7 +62,7 @@ func AddProduct(c *fiber.Ctx) error {
 		}
 
 		// Store the image URL (assuming you're serving the images statically)
-		imageURL := fmt.Sprintf("http://localhost:3000/uploads/product_images/%s", fileName)
+		imageURL := fmt.Sprintf("https://jijoshibuukken.website/uploads/product_images/%s", fileName)
 
 		// Append each image URL to the product's Images array
 		image := models.Image{
@@ -134,7 +134,7 @@ func EditProduct(c *fiber.Ctx) error {
 		}
 
 		// Store the image URL (assuming you're serving the images statically)
-		imageURL := fmt.Sprintf("http://localhost:3000/uploads/product_images/%s", url.PathEscape(fileName))
+		imageURL := fmt.Sprintf("https://jijoshibuukken.website/uploads/product_images/%s", url.PathEscape(fileName))
 
 		// Append each image URL to the product's Images array
 		image := models.Image{

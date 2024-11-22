@@ -63,7 +63,7 @@ func StoreSignup(c *fiber.Ctx) error {
 	
 	
     // Store the image URL in the database
-    imageURL := fmt.Sprintf("http://localhost:3000/uploads/certificates/%s", filename)
+    imageURL := fmt.Sprintf("https://jijoshibuukken.website/uploads/certificates/%s", filename)
 
 	// Save the file on the server
 	if err := c.SaveFile(file, uploadDir+filename); err != nil {

@@ -95,7 +95,7 @@ func UpdateStoreProfile(c *fiber.Ctx) error {
 		}
 
 		// Store the file path in the database
-		dbUser.StoreImage = fmt.Sprintf("http://localhost:3000/uploads/store_images/%s", storeImageName)
+		dbUser.StoreImage = fmt.Sprintf("https://jijoshibuukken.website/uploads/store_images/%s", storeImageName)
 	}
 
 	// Save the updated user to the database
