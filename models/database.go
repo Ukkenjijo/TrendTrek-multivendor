@@ -29,7 +29,7 @@ type User struct {
 	ProfilePicture string    `gorm:"size:255"`
 	UserCart       *Cart     `gorm:"foreignKey:UserID" json:"user_cart"`
 	Addresses      []Address `json:"addresses" gorm:"foreignKey:UserID"`
-	ReferralCode   string    `json:"referral_code" gorm:"unique"`
+	ReferralCode   string    `json:"referral_code,omitempty"`
 }
 
 type Address struct {

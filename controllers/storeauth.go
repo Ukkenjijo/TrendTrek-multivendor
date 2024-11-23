@@ -43,9 +43,9 @@ func StoreSignup(c *fiber.Ctx) error {
 	}
 
 	// Validate the request input
-	if err := utils.ValidateStruct(password); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
-	}
+	// if err := utils.ValidateStruct(password); err != nil {
+	// 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	// }
 
 	
 
