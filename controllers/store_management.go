@@ -17,6 +17,7 @@ import (
 
 // AddProduct handles the creation of a new product with an image upload
 func AddProduct(c *fiber.Ctx) error {
+	storeID,_:=GetStoreIDByUserID(uint(c.Locals("user_id").(float64)))
 	// Parse multipart form data
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -30,7 +31,7 @@ func AddProduct(c *fiber.Ctx) error {
 	description := form.Value["description"][0]
 	price, _ := strconv.ParseFloat(form.Value["price"][0], 64)
 	stockQuantity, _ := strconv.Atoi(form.Value["stock_quantity"][0])
-	storeID, _ := strconv.Atoi(form.Value["store_id"][0])
+	
 	categoryID, _ := strconv.Atoi(form.Value["category_id"][0])
 
 	// Create a new Product struct
