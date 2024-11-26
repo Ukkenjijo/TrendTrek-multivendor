@@ -274,6 +274,8 @@ func GetProductbyId(c *fiber.Ctx) error {
 		productResponse.Images[i] = image.URL
 	}
 
+	
+
 	// Return the list of products with the custom response struct
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Products retrieved successfully",

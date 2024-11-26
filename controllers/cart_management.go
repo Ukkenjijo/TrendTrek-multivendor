@@ -158,7 +158,7 @@ func ListCartItems(c *fiber.Ctx) error {
 				discount = (totalAmount * coupon.Discount / 100)
 
 			} else {
-				discount = coupon.MaxDiscountAmount
+				discount = 0.0
 			}
 			finalamount = totalAmount - discount
 
