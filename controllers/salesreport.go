@@ -163,7 +163,7 @@ func GetSalesReportAdmin(c *fiber.Ctx) error {
 		if orderpaymentdetails.PaymentType == "COD" {
 			codCount++
 		}
-		if orderpaymentdetails.PaymentType == "Razorpay" {
+		if orderpaymentdetails.PaymentType == "razorpay" {
 			razorpayCount++
 		}
 		if orderpaymentdetails.PaymentType == "Wallet" {
@@ -290,7 +290,7 @@ func GenerateSalesReportPDF(c *fiber.Ctx) error {
 		switch orderPaymentDetails.PaymentType {
 		case "COD":
 			codCount++
-		case "Razorpay":
+		case "razorpay":
 			razorpayCount++
 		case "Wallet":
 			walletCount++
